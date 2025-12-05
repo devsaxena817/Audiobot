@@ -1,58 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>NutriFit AI - Audio Analyzer</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fc;
-            text-align: center;
-            padding: 30px;
-        }
-        form {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            width: 400px;
-            margin: auto;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-        }
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 6px;
-            margin-top: 10px;
-            cursor: pointer;
-        }
-        .result-box {
-            background: white;
-            margin: 25px auto;
-            padding: 20px;
-            width: 600px;
-            text-align: left;
-            border-left: 5px solid #4CAF50;
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NutriFit AI - Voice Assistant</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div class="container">
+    <header>
+        <h1>🥗 NutriFit AI</h1>
+        <p class="subtitle">Upload or record a diet consultation — get a structured report & PDF.</p>
+    </header>
 
-<h1>🎧 NutriFit AI Voice Analyzer</h1>
-<p>Upload a call recording and extract meaningful nutrition insights.</p>
+    <main>
+        <div id="chatBox" class="chat-box"></div>
 
-<form action="/" method="POST" enctype="multipart/form-data">
-    <input type="file" name="audio" accept="audio/*" required><br>
-    <button type="submit">Analyze Audio</button>
-</form>
+        <div class="controls">
+            <div class="left">
+                <input id="audioFile" type="file" accept="audio/*" />
+                <button id="sendBtn">📤 Send File</button>
+            </div>
 
-{% if result %}
-<div class="result-box">
-    <h3>📌 Analysis Result:</h3>
-    <pre>{{ result }}</pre>
+            <div class="right">
+                <button id="recordBtn">🎙️ Record</button>
+                <button id="stopBtn" disabled>⏹️ Stop</button>
+            </div>
+        </div>
+
+        <audio id="player" controls class="hidden"></audio>
+
+        <div id="loading" class="hidden">
+            <span>⏳ Processing audio...</span>
+            <div class="progress-container"><div id="progressBar" class="progress-bar"></div></div>
+        </div>
+
+        <div id="actions" class="hidden">
+            <button id="downloadPdfBtn">📄 Download PDF</button>
+            <button id="copyJsonBtn">📋 Copy JSON</button>
+        </div>
+
+        <div id="toastBox"></div>
+    </main>
 </div>
-{% endif %}
 
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
