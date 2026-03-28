@@ -65,8 +65,9 @@ async function sendAudioBlob(blob, filename="recording.wav") {
         stopProgress();
 
         if (data.error) {
-            toast("Error: " + (data.error));
-            appendMessage("Error: " + JSON.stringify(data.error));
+            const detail = data.details ? ` (${data.exception_type || "Error"}: ${data.details})` : "";
+            toast("Error: " + data.error);
+            appendMessage("Error: " + data.error + detail);
             return;
         }
 

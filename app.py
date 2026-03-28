@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import logging
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 from google import generativeai as genai
@@ -21,6 +22,11 @@ MODEL_NAME = "gemini-2.0-flash"
 model = genai.GenerativeModel(MODEL_NAME)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
+app.logger.setLevel(logging.INFO)
 
 # Folder to store generated PDFs
 REPORTS_DIR = os.path.join(app.static_folder, "reports")
@@ -71,6 +77,12 @@ def call_model_with_audio(audio_bytes: bytes, mime_type: str, prompt: str) -> st
     """
     Call Gemini generate_content with audio bytes and return raw text response.
     """
+    app.logger.info(
+        "Calling Gemini model=%s mime_type=%s audio_bytes=%s",
+        MODEL_NAME,
+        mime_type,
+        len(audio_bytes),
+    )
     response = model.generate_content(
         [
             prompt,
@@ -218,8 +230,15 @@ def process():
     """
     f = request.files.get("audio")
     if not f:
+        app.logger.warning("Process request rejected: no audio file received")
         return jsonify({"error": "No audio file received"}), 400
 
+    app.logger.info(
+        "Received audio upload filename=%s content_type=%s content_length=%s",
+        f.filename,
+        f.content_type,
+        request.content_length,
+    )
     audio_bytes = f.read()
     mime_type = f.content_type or "audio/wav"
 
@@ -227,17 +246,36 @@ def process():
     try:
         raw = call_model_with_audio(audio_bytes, mime_type, DUAL_PROMPT)
     except Exception as e:
-        return jsonify({"error": "Model call failed", "details": str(e)}), 500
+        app.logger.exception(
+            "Gemini model call failed for filename=%s mime_type=%s",
+            f.filename,
+            mime_type,
+        )
+        return jsonify({
+            "error": "Model call failed",
+            "details": str(e),
+            "exception_type": e.__class__.__name__,
+        }), 500
 
     # Extract JSON
     parsed_json, remainder = extract_first_json(raw)
     if parsed_json is None:
         # Return raw for debugging
+        app.logger.error(
+            "Could not extract JSON from model output for filename=%s raw_preview=%r",
+            f.filename,
+            raw[:1000],
+        )
         return jsonify({"error": "Could not extract JSON from model output", "raw": raw}), 500
 
     # Minimal validation
     if not validate_json_schema(parsed_json):
         # still continue but flagged
+        app.logger.warning(
+            "Parsed JSON missing required keys for filename=%s keys=%s",
+            f.filename,
+            sorted(parsed_json.keys()),
+        )
         parsed_json["_validation_warning"] = "Missing required top-level keys"
 
     # Create PDF and return URL
@@ -246,8 +284,18 @@ def process():
         pdf_path = create_pdf_from_json(parsed_json, pdf_filename)
         pdf_url = f"/static/reports/{pdf_filename}"
     except Exception as e:
+        app.logger.exception(
+            "PDF generation failed for filename=%s pdf_filename=%s",
+            f.filename,
+            pdf_filename,
+        )
         pdf_url = None
 
+    app.logger.info(
+        "Process request completed filename=%s pdf_created=%s",
+        f.filename,
+        bool(pdf_url),
+    )
     return jsonify({
         "json": parsed_json,
         "report_text": remainder.strip() or raw,
@@ -259,6 +307,16 @@ def process():
 def download_report(filename):
     # Serve from static/reports
     return send_from_directory(REPORTS_DIR, filename, as_attachment=True)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    app.logger.exception("Unhandled server error during %s %s", request.method, request.path)
+    return jsonify({
+        "error": "Internal server error",
+        "details": str(error),
+        "exception_type": error.__class__.__name__,
+    }), 500
 
 
 if __name__ == "__main__":
